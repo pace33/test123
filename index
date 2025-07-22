@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>주간 출장 플래너</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        /* 기본 폰트 설정 */
+        body {
+            font-family: 'Noto Sans KR', 'Inter', sans-serif;
+        }
+        /* 스크롤바 디자인 */
+        .schedule-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .schedule-list::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .schedule-list::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 3px;
+        }
+        .schedule-list::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        /* 모달 애니메이션 */
+        .modal-enter {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+        .modal-enter-active {
+            opacity: 1;
+            transform: scale(1);
+            transition: all 0.2s ease-out;
+        }
+        .modal-leave-active {
+            opacity: 0;
+            transform: scale(0.95);
+            transition: all 0.2s ease-in;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="app" class="flex flex-col h-screen">
+        <!-- 헤더 -->
+        <header class="bg-white shadow-md p-4 z-10">
+            <div class="max-w-7xl mx-auto flex justify-between items-center">
+                <h1 class="text-xl md:text-2xl font-bold text-blue-600">주간 출장 플래너</h1>
+                <div class="flex items-center space-x-2 md:space-x-4">
+                    <span id="current-year-month" class="text-lg font-semibold hidden md:block"></span>
+                    <button id="prev-week-btn" class="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors">◀</button>
+                    <button id="today-btn" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-100 rounded-lg transition-colors">오늘</button>
+                    <button id="next-week-btn" class="px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors">▶</button>
+                </div>
+            </div>
+             <div id="user-id-display" class="text-center text-xs text-gray-500 mt-2"></div>
+        </header>
+
+        <!-- 메인 콘텐츠: 주간 캘린더 -->
+        <main class="flex-grow p-2 md:p-4 overflow-hidden">
+            <div id="calendar-grid" class="grid grid-cols-1 md:grid-cols-7 h-full gap-2 md:gap-4">
+                <!-- 요일 컬럼이 동적으로 생성됩니다 -->
+            </div>
+        </main>
+
+        <!-- 일정 추가 버튼 -->
+        <button id="add-schedule-fab" class="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg transition-transform hover:scale-110">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+        </button>
+    </div>
+
+    <!-- 일정 추가/수정 모달 -->
+    <div id="schedule-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div id="modal-content" class="bg-white rounded-xl shadow-2xl p-6 md:p-8 w-11/12 max-w-md modal-enter">
+            <h2 id="modal-title" class="text-2xl font-bold mb-6">새 일정 추가</h2>
+            <form id="schedule-form">
+                <input type="hidden" id="schedule-id">
+                <div class="mb-4">
+                    <label for="schedule-date" class="block text-sm font-medium text-gray-700 mb-1">날짜</label>
+                    <input type="date" id="schedule-date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+                </div>
+                <div class="mb-4">
+                    <label for="schedule-location" class="block text-sm font-medium text-gray-700 mb-1">출장지</label>
+                    <input type="text" id="schedule-location" placeholder="예: 서울 본사" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+                </div>
+                <div class="mb-6">
+                    <label for="schedule-description" class="block text-sm font-medium text-gray-700 mb-1">업무 내용</label>
+                    <textarea id="schedule-description" rows="4" placeholder="예: 2분기 실적 보고 회의" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required></textarea>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancel-btn" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors">취소</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">저장</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 삭제 확인 모달 -->
+    <div id="delete-confirm-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div id="delete-modal-content" class="bg-white rounded-xl shadow-2xl p-8 w-11/12 max-w-sm modal-enter">
+            <h2 class="text-xl font-bold mb-4">일정 삭제</h2>
+            <p class="text-gray-600 mb-6">정말로 이 일정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.</p>
+            <div class="flex justify-end space-x-3">
+                <button type="button" id="cancel-delete-btn" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors">취소</button>
+                <button type="button" id="confirm-delete-btn" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors">삭제</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // Firebase v11.6.1
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, addDoc, setDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- 전역 변수 및 상태 관리 ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        
+        let currentDate = new Date();
+        let schedules = [];
+        let currentUserId = null;
+        let unsubscribeSchedules = null; // onSnapshot 리스너 해제 함수
+        let scheduleToDeleteId = null; // 삭제할 일정의 ID
+
+        // --- Firebase 초기화 ---
+        let app, auth, db;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+        } catch (e) {
+            console.error("Firebase 초기화 오류:", e);
+            alert("Firebase 설정에 문제가 발생했습니다. 앱을 사용할 수 없습니다.");
+        }
+
+        // --- UI 요소 ---
+        const calendarGrid = document.getElementById('calendar-grid');
+        const currentYearMonthEl = document.getElementById('current-year-month');
+        const prevWeekBtn = document.getElementById('prev-week-btn');
+        const nextWeekBtn = document.getElementById('next-week-btn');
+        const todayBtn = document.getElementById('today-btn');
+        const addScheduleFab = document.getElementById('add-schedule-fab');
+        const scheduleModal = document.getElementById('schedule-modal');
+        const modalContent = document.getElementById('modal-content');
+        const modalTitle = document.getElementById('modal-title');
+        const scheduleForm = document.getElementById('schedule-form');
+        const scheduleIdInput = document.getElementById('schedule-id');
+        const scheduleDateInput = document.getElementById('schedule-date');
+        const scheduleLocationInput = document.getElementById('schedule-location');
+        const scheduleDescriptionInput = document.getElementById('schedule-description');
+        const cancelBtn = document.getElementById('cancel-btn');
+        const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+        const deleteModalContent = document.getElementById('delete-modal-content');
+        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+        const userIdDisplay = document.getElementById('user-id-display');
+
+        // --- 날짜 및 캘린더 관련 함수 ---
+
+        /**
+         * 주어진 날짜를 'YYYY-MM-DD' 형식의 문자열로 변환합니다.
+         * @param {Date} date - 변환할 날짜 객체
+         * @returns {string} 'YYYY-MM-DD' 형식의 문자열
+         */
+        function formatDate(date) {
+            return date.toISOString().split('T')[0];
+        }
+
+        /**
+         * 현재 주의 캘린더를 렌더링합니다.
+         */
+        function renderWeek() {
+            calendarGrid.innerHTML = '';
+            const weekStart = getWeekStart(currentDate);
+
+            currentYearMonthEl.textContent = `${weekStart.getFullYear()}년 ${weekStart.getMonth() + 1}월`;
+
+            for (let i = 0; i < 7; i++) {
+                const day = new Date(weekStart);
+                day.setDate(day.getDate() + i);
+                
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'bg-white rounded-lg shadow flex flex-col h-full';
+                dayDiv.dataset.date = formatDate(day);
+
+                const dayHeader = document.createElement('div');
+                const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+                const isToday = formatDate(day) === formatDate(new Date());
+                
+                dayHeader.className = `p-3 font-semibold text-center border-b ${isToday ? 'bg-blue-100 text-blue-700 rounded-t-lg' : 'bg-gray-50'}`;
+                dayHeader.textContent = `${day.getDate()}일 (${dayNames[day.getDay()]})`;
+                
+                const scheduleList = document.createElement('div');
+                scheduleList.className = 'schedule-list flex-grow overflow-y-auto p-2 space-y-2';
+                
+                dayDiv.appendChild(dayHeader);
+                dayDiv.appendChild(scheduleList);
+                calendarGrid.appendChild(dayDiv);
+            }
+            renderSchedules();
+        }
+
+        /**
+         * 주어진 날짜가 속한 주의 시작일(월요일)을 반환합니다.
+         * @param {Date} date - 기준 날짜
+         * @returns {Date} 주의 시작일 (월요일)
+         */
+        function getWeekStart(date) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1); // 일요일(0)을 주의 시작으로 간주하는 경우를 보정
+            return new Date(d.setDate(diff));
+        }
+
+        // --- 스케줄 렌더링 함수 ---
+
+        /**
+         * 현재 주의 스케줄을 화면에 렌더링합니다.
+         */
+        function renderSchedules() {
+            // 기존 스케줄 카드 모두 제거
+            document.querySelectorAll('.schedule-card').forEach(card => card.remove());
+            
+            const weekStart = getWeekStart(currentDate);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekEnd.getDate() + 6);
+
+            const weekSchedules = schedules.filter(schedule => {
+                const scheduleDate = new Date(schedule.date + 'T00:00:00'); // 시간대 문제 방지
+                return scheduleDate >= weekStart && scheduleDate <= weekEnd;
+            });
+
+            weekSchedules.forEach(schedule => {
+                const dateStr = schedule.date;
+                const dayContainer = document.querySelector(`[data-date="${dateStr}"] .schedule-list`);
+                if (dayContainer) {
+                    const card = createScheduleCard(schedule);
+                    dayContainer.appendChild(card);
+                }
+            });
+        }
+
+        /**
+         * 스케줄 데이터로 카드 DOM 요소를 생성합니다.
+         * @param {object} schedule - 스케줄 데이터
+         * @returns {HTMLElement} 생성된 카드 요소
+         */
+        function createScheduleCard(schedule) {
+            const card = document.createElement('div');
+            card.className = 'schedule-card bg-blue-50 border-l-4 border-blue-500 p-3 rounded-r-lg shadow-sm cursor-pointer hover:shadow-md transition-shadow';
+            card.dataset.id = schedule.id;
+
+            card.innerHTML = `
+                <h3 class="font-bold text-md text-blue-800">${escapeHTML(schedule.location)}</h3>
+                <p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">${escapeHTML(schedule.description)}</p>
+                <div class="flex justify-end space-x-2 mt-2">
+                    <button data-action="edit" class="text-xs text-gray-500 hover:text-blue-600">수정</button>
+                    <button data-action="delete" class="text-xs text-gray-500 hover:text-red-600">삭제</button>
+                </div>
+            `;
+            return card;
+        }
+        
+        /**
+         * HTML Injection 방지를 위한 유틸리티 함수
+         */
+        function escapeHTML(str) {
+            const p = document.createElement('p');
+            p.textContent = str;
+            return p.innerHTML;
+        }
+
+        // --- 모달 관리 함수 ---
+
+        function openModal(mode, schedule = null) {
+            scheduleForm.reset();
+            if (mode === 'add') {
+                modalTitle.textContent = '새 일정 추가';
+                scheduleIdInput.value = '';
+                scheduleDateInput.value = formatDate(new Date());
+            } else if (mode === 'edit' && schedule) {
+                modalTitle.textContent = '일정 수정';
+                scheduleIdInput.value = schedule.id;
+                scheduleDateInput.value = schedule.date;
+                scheduleLocationInput.value = schedule.location;
+                scheduleDescriptionInput.value = schedule.description;
+            }
+            scheduleModal.classList.remove('hidden');
+            setTimeout(() => modalContent.classList.add('modal-enter-active'), 10);
+        }
+
+        function closeModal() {
+            modalContent.classList.remove('modal-enter-active');
+            modalContent.classList.add('modal-leave-active');
+            setTimeout(() => {
+                scheduleModal.classList.add('hidden');
+                modalContent.classList.remove('modal-leave-active');
+            }, 200);
+        }
+
+        function openDeleteModal(scheduleId) {
+            scheduleToDeleteId = scheduleId;
+            deleteConfirmModal.classList.remove('hidden');
+            setTimeout(() => deleteModalContent.classList.add('modal-enter-active'), 10);
+        }
+
+        function closeDeleteModal() {
+            deleteModalContent.classList.remove('modal-enter-active');
+            deleteModalContent.classList.add('modal-leave-active');
+            setTimeout(() => {
+                deleteConfirmModal.classList.add('hidden');
+                deleteModalContent.classList.remove('modal-leave-active');
+                scheduleToDeleteId = null;
+            }, 200);
+        }
+
+
+        // --- Firestore 데이터 처리 함수 ---
+
+        /**
+         * 사용자의 스케줄 데이터를 실시간으로 구독합니다.
+         */
+        function subscribeToSchedules() {
+            if (unsubscribeSchedules) unsubscribeSchedules(); // 이전 구독 해제
+
+            if (!currentUserId) return;
+            
+            const schedulesCol = collection(db, 'artifacts', appId, 'users', currentUserId, 'schedules');
+            const q = query(schedulesCol);
+            
+            unsubscribeSchedules = onSnapshot(q, (querySnapshot) => {
+                schedules = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderWeek();
+            }, (error) => {
+                console.error("데이터 구독 중 오류 발생:", error);
+            });
+        }
+
+        /**
+         * Firestore에 스케줄을 추가하거나 업데이트합니다.
+         */
+        async function saveSchedule(e) {
+            e.preventDefault();
+            if (!currentUserId) {
+                alert("로그인이 필요합니다.");
+                return;
+            }
+
+            const id = scheduleIdInput.value;
+            const scheduleData = {
+                date: scheduleDateInput.value,
+                location: scheduleLocationInput.value.trim(),
+                description: scheduleDescriptionInput.value.trim()
+            };
+
+            if (!scheduleData.location || !scheduleData.description) {
+                alert("출장지와 업무 내용을 모두 입력해주세요.");
+                return;
+            }
+            
+            const schedulesCol = collection(db, 'artifacts', appId, 'users', currentUserId, 'schedules');
+
+            try {
+                if (id) { // 수정 모드
+                    const scheduleRef = doc(schedulesCol, id);
+                    await setDoc(scheduleRef, scheduleData, { merge: true });
+                } else { // 추가 모드
+                    await addDoc(schedulesCol, scheduleData);
+                }
+                closeModal();
+            } catch (error) {
+                console.error("저장 중 오류 발생:", error);
+                alert("일정 저장에 실패했습니다.");
+            }
+        }
+
+        /**
+         * Firestore에서 스케줄을 삭제합니다.
+         */
+        async function deleteSchedule() {
+            if (!currentUserId || !scheduleToDeleteId) return;
+            
+            const scheduleRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'schedules', scheduleToDeleteId);
+            try {
+                await deleteDoc(scheduleRef);
+                closeDeleteModal();
+            } catch (error) {
+                console.error("삭제 중 오류 발생:", error);
+                alert("일정 삭제에 실패했습니다.");
+            }
+        }
+
+        // --- 이벤트 리스너 설정 ---
+
+        function setupEventListeners() {
+            prevWeekBtn.addEventListener('click', () => {
+                currentDate.setDate(currentDate.getDate() - 7);
+                renderWeek();
+            });
+
+            nextWeekBtn.addEventListener('click', () => {
+                currentDate.setDate(currentDate.getDate() + 7);
+                renderWeek();
+            });
+
+            todayBtn.addEventListener('click', () => {
+                currentDate = new Date();
+                renderWeek();
+            });
+
+            addScheduleFab.addEventListener('click', () => openModal('add'));
+            cancelBtn.addEventListener('click', closeModal);
+            scheduleForm.addEventListener('submit', saveSchedule);
+
+            // 이벤트 위임: 스케줄 카드 내의 수정/삭제 버튼 처리
+            calendarGrid.addEventListener('click', (e) => {
+                const button = e.target.closest('button[data-action]');
+                if (!button) return;
+
+                const action = button.dataset.action;
+                const card = e.target.closest('.schedule-card');
+                const scheduleId = card.dataset.id;
+                
+                if (action === 'edit') {
+                    const schedule = schedules.find(s => s.id === scheduleId);
+                    if (schedule) openModal('edit', schedule);
+                } else if (action === 'delete') {
+                    openDeleteModal(scheduleId);
+                }
+            });
+
+            cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+            confirmDeleteBtn.addEventListener('click', deleteSchedule);
+        }
+
+        // --- 애플리케이션 초기화 ---
+        async function initializeAppAndAuth() {
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUserId = user.uid;
+                    userIdDisplay.textContent = `사용자 ID: ${currentUserId}`;
+                    subscribeToSchedules(); // 로그인 성공 후 데이터 구독 시작
+                } else {
+                    currentUserId = null;
+                    if(unsubscribeSchedules) unsubscribeSchedules();
+                    schedules = [];
+                    renderWeek();
+                    userIdDisplay.textContent = '로그인되지 않았습니다.';
+                }
+            });
+            
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("로그인 오류:", error);
+                userIdDisplay.textContent = '로그인에 실패했습니다. 새로고침 해주세요.';
+            }
+        }
+
+        // --- 앱 시작 ---
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!app) return; // Firebase 초기화 실패 시 앱 실행 중단
+            renderWeek();
+            setupEventListeners();
+            initializeAppAndAuth();
+        });
+
+    </script>
+</body>
+</html>
