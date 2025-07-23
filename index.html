@@ -92,9 +92,17 @@
                     <label for="schedule-location" class="block text-sm font-medium text-gray-700 mb-1">출장지</label>
                     <input type="text" id="schedule-location" placeholder="예: 서울 본사" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
                 </div>
-                <div class="mb-6">
+                <div class="mb-4">
                     <label for="schedule-description" class="block text-sm font-medium text-gray-700 mb-1">업무 내용</label>
                     <textarea id="schedule-description" rows="4" placeholder="예: 2분기 실적 보고 회의" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required></textarea>
+                </div>
+                <div class="mb-6">
+                    <label for="schedule-status" class="block text-sm font-medium text-gray-700 mb-1">상태</label>
+                    <select id="schedule-status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white">
+                        <option value="planned">예정</option>
+                        <option value="confirmed">확정</option>
+                        <option value="completed">완료</option>
+                    </select>
                 </div>
                 <div class="flex justify-end space-x-3">
                     <button type="button" id="cancel-btn" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors">취소</button>
@@ -141,7 +149,7 @@
             db = getFirestore(app);
         } catch (e) {
             console.error("Firebase 초기화 오류:", e);
-            alert("Firebase 설정에 문제가 발생했습니다. 앱을 사용할 수 없습니다.");
+            // alert() 대신 사용자에게 피드백을 줄 다른 방법을 고려할 수 있습니다.
         }
 
         // --- UI 요소 ---
@@ -159,6 +167,7 @@
         const scheduleDateInput = document.getElementById('schedule-date');
         const scheduleLocationInput = document.getElementById('schedule-location');
         const scheduleDescriptionInput = document.getElementById('schedule-description');
+        const scheduleStatusInput = document.getElementById('schedule-status'); // 상태 선택 요소 추가
         const cancelBtn = document.getElementById('cancel-btn');
         const deleteConfirmModal = document.getElementById('delete-confirm-modal');
         const deleteModalContent = document.getElementById('delete-modal-content');
@@ -168,22 +177,13 @@
 
         // --- 날짜 및 캘린더 관련 함수 ---
 
-        /**
-         * 주어진 날짜를 'YYYY-MM-DD' 형식의 문자열로 변환합니다.
-         * @param {Date} date - 변환할 날짜 객체
-         * @returns {string} 'YYYY-MM-DD' 형식의 문자열
-         */
         function formatDate(date) {
             return date.toISOString().split('T')[0];
         }
 
-        /**
-         * 현재 주의 캘린더를 렌더링합니다.
-         */
         function renderWeek() {
             calendarGrid.innerHTML = '';
             const weekStart = getWeekStart(currentDate);
-
             currentYearMonthEl.textContent = `${weekStart.getFullYear()}년 ${weekStart.getMonth() + 1}월`;
 
             for (let i = 0; i < 7; i++) {
@@ -211,25 +211,16 @@
             renderSchedules();
         }
 
-        /**
-         * 주어진 날짜가 속한 주의 시작일(월요일)을 반환합니다.
-         * @param {Date} date - 기준 날짜
-         * @returns {Date} 주의 시작일 (월요일)
-         */
         function getWeekStart(date) {
             const d = new Date(date);
             const day = d.getDay();
-            const diff = d.getDate() - day + (day === 0 ? -6 : 1); // 일요일(0)을 주의 시작으로 간주하는 경우를 보정
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
             return new Date(d.setDate(diff));
         }
 
         // --- 스케줄 렌더링 함수 ---
 
-        /**
-         * 현재 주의 스케줄을 화면에 렌더링합니다.
-         */
         function renderSchedules() {
-            // 기존 스케줄 카드 모두 제거
             document.querySelectorAll('.schedule-card').forEach(card => card.remove());
             
             const weekStart = getWeekStart(currentDate);
@@ -237,13 +228,12 @@
             weekEnd.setDate(weekEnd.getDate() + 6);
 
             const weekSchedules = schedules.filter(schedule => {
-                const scheduleDate = new Date(schedule.date + 'T00:00:00'); // 시간대 문제 방지
+                const scheduleDate = new Date(schedule.date + 'T00:00:00');
                 return scheduleDate >= weekStart && scheduleDate <= weekEnd;
             });
 
             weekSchedules.forEach(schedule => {
-                const dateStr = schedule.date;
-                const dayContainer = document.querySelector(`[data-date="${dateStr}"] .schedule-list`);
+                const dayContainer = document.querySelector(`[data-date="${schedule.date}"] .schedule-list`);
                 if (dayContainer) {
                     const card = createScheduleCard(schedule);
                     dayContainer.appendChild(card);
@@ -252,18 +242,28 @@
         }
 
         /**
-         * 스케줄 데이터로 카드 DOM 요소를 생성합니다.
+         * 스케줄 데이터로 카드 DOM 요소를 생성하고 상태에 따라 스타일을 적용합니다.
          * @param {object} schedule - 스케줄 데이터
          * @returns {HTMLElement} 생성된 카드 요소
          */
         function createScheduleCard(schedule) {
             const card = document.createElement('div');
-            card.className = 'schedule-card bg-blue-50 border-l-4 border-blue-500 p-3 rounded-r-lg shadow-sm cursor-pointer hover:shadow-md transition-shadow';
             card.dataset.id = schedule.id;
 
+            // 상태별 스타일 정의
+            const statusStyles = {
+                planned:   { card: 'bg-blue-50 border-blue-500', title: 'text-blue-800',  text: 'text-gray-700', decoration: '' },
+                confirmed: { card: 'bg-green-50 border-green-500', title: 'text-green-800', text: 'text-gray-700', decoration: '' },
+                completed: { card: 'bg-gray-100 border-gray-400', title: 'text-gray-500',  text: 'text-gray-500', decoration: 'line-through' }
+            };
+
+            const style = statusStyles[schedule.status] || statusStyles.planned;
+
+            card.className = `schedule-card ${style.card} border-l-4 p-3 rounded-r-lg shadow-sm cursor-pointer hover:shadow-md transition-shadow`;
+
             card.innerHTML = `
-                <h3 class="font-bold text-md text-blue-800">${escapeHTML(schedule.location)}</h3>
-                <p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">${escapeHTML(schedule.description)}</p>
+                <h3 class="font-bold text-md ${style.title} ${style.decoration}">${escapeHTML(schedule.location)}</h3>
+                <p class="text-sm mt-1 whitespace-pre-wrap ${style.text} ${style.decoration}">${escapeHTML(schedule.description)}</p>
                 <div class="flex justify-end space-x-2 mt-2">
                     <button data-action="edit" class="text-xs text-gray-500 hover:text-blue-600">수정</button>
                     <button data-action="delete" class="text-xs text-gray-500 hover:text-red-600">삭제</button>
@@ -272,9 +272,6 @@
             return card;
         }
         
-        /**
-         * HTML Injection 방지를 위한 유틸리티 함수
-         */
         function escapeHTML(str) {
             const p = document.createElement('p');
             p.textContent = str;
@@ -289,12 +286,14 @@
                 modalTitle.textContent = '새 일정 추가';
                 scheduleIdInput.value = '';
                 scheduleDateInput.value = formatDate(new Date());
+                scheduleStatusInput.value = 'planned'; // 새 일정 기본 상태
             } else if (mode === 'edit' && schedule) {
                 modalTitle.textContent = '일정 수정';
                 scheduleIdInput.value = schedule.id;
                 scheduleDateInput.value = schedule.date;
                 scheduleLocationInput.value = schedule.location;
                 scheduleDescriptionInput.value = schedule.description;
+                scheduleStatusInput.value = schedule.status || 'planned'; // 기존 상태 불러오기
             }
             scheduleModal.classList.remove('hidden');
             setTimeout(() => modalContent.classList.add('modal-enter-active'), 10);
@@ -328,12 +327,8 @@
 
         // --- Firestore 데이터 처리 함수 ---
 
-        /**
-         * 사용자의 스케줄 데이터를 실시간으로 구독합니다.
-         */
         function subscribeToSchedules() {
-            if (unsubscribeSchedules) unsubscribeSchedules(); // 이전 구독 해제
-
+            if (unsubscribeSchedules) unsubscribeSchedules();
             if (!currentUserId) return;
             
             const schedulesCol = collection(db, 'artifacts', appId, 'users', currentUserId, 'schedules');
@@ -347,57 +342,41 @@
             });
         }
 
-        /**
-         * Firestore에 스케줄을 추가하거나 업데이트합니다.
-         */
         async function saveSchedule(e) {
             e.preventDefault();
-            if (!currentUserId) {
-                alert("로그인이 필요합니다.");
-                return;
-            }
+            if (!currentUserId) return;
 
             const id = scheduleIdInput.value;
             const scheduleData = {
                 date: scheduleDateInput.value,
                 location: scheduleLocationInput.value.trim(),
-                description: scheduleDescriptionInput.value.trim()
+                description: scheduleDescriptionInput.value.trim(),
+                status: scheduleStatusInput.value // 상태 정보 추가
             };
 
-            if (!scheduleData.location || !scheduleData.description) {
-                alert("출장지와 업무 내용을 모두 입력해주세요.");
-                return;
-            }
+            if (!scheduleData.location || !scheduleData.description) return;
             
             const schedulesCol = collection(db, 'artifacts', appId, 'users', currentUserId, 'schedules');
-
             try {
-                if (id) { // 수정 모드
-                    const scheduleRef = doc(schedulesCol, id);
-                    await setDoc(scheduleRef, scheduleData, { merge: true });
-                } else { // 추가 모드
+                if (id) {
+                    await setDoc(doc(schedulesCol, id), scheduleData, { merge: true });
+                } else {
                     await addDoc(schedulesCol, scheduleData);
                 }
                 closeModal();
             } catch (error) {
                 console.error("저장 중 오류 발생:", error);
-                alert("일정 저장에 실패했습니다.");
             }
         }
 
-        /**
-         * Firestore에서 스케줄을 삭제합니다.
-         */
         async function deleteSchedule() {
             if (!currentUserId || !scheduleToDeleteId) return;
-            
             const scheduleRef = doc(db, 'artifacts', appId, 'users', currentUserId, 'schedules', scheduleToDeleteId);
             try {
                 await deleteDoc(scheduleRef);
                 closeDeleteModal();
             } catch (error) {
                 console.error("삭제 중 오류 발생:", error);
-                alert("일정 삭제에 실패했습니다.");
             }
         }
 
@@ -408,26 +387,21 @@
                 currentDate.setDate(currentDate.getDate() - 7);
                 renderWeek();
             });
-
             nextWeekBtn.addEventListener('click', () => {
                 currentDate.setDate(currentDate.getDate() + 7);
                 renderWeek();
             });
-
             todayBtn.addEventListener('click', () => {
                 currentDate = new Date();
                 renderWeek();
             });
-
             addScheduleFab.addEventListener('click', () => openModal('add'));
             cancelBtn.addEventListener('click', closeModal);
             scheduleForm.addEventListener('submit', saveSchedule);
 
-            // 이벤트 위임: 스케줄 카드 내의 수정/삭제 버튼 처리
             calendarGrid.addEventListener('click', (e) => {
                 const button = e.target.closest('button[data-action]');
                 if (!button) return;
-
                 const action = button.dataset.action;
                 const card = e.target.closest('.schedule-card');
                 const scheduleId = card.dataset.id;
@@ -450,7 +424,7 @@
                 if (user) {
                     currentUserId = user.uid;
                     userIdDisplay.textContent = `사용자 ID: ${currentUserId}`;
-                    subscribeToSchedules(); // 로그인 성공 후 데이터 구독 시작
+                    subscribeToSchedules();
                 } else {
                     currentUserId = null;
                     if(unsubscribeSchedules) unsubscribeSchedules();
@@ -474,7 +448,7 @@
 
         // --- 앱 시작 ---
         document.addEventListener('DOMContentLoaded', () => {
-            if (!app) return; // Firebase 초기화 실패 시 앱 실행 중단
+            if (!app) return;
             renderWeek();
             setupEventListeners();
             initializeAppAndAuth();
